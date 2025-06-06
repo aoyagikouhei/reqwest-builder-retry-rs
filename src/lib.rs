@@ -1,8 +1,8 @@
-use std::time::Duration;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use crate::error::Error;
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use reqwest::{RequestBuilder, Response};
 use std::future::Future;
-use crate::error::Error;
+use std::time::Duration;
 
 pub mod error;
 pub use reqwest;
@@ -34,7 +34,8 @@ where
         retry_duration,
         default_jitter,
         default_sleeper,
-    ).await
+    )
+    .await
 }
 
 pub async fn execute_raw<T, F, G, H, I, FutG, FutI>(
@@ -78,7 +79,11 @@ where
     Err(Error::TryOver)
 }
 
-fn calc_retry_duration(retry_duration: Duration, jitter_duration: Duration, try_count: u32) -> Duration {
+fn calc_retry_duration(
+    retry_duration: Duration,
+    jitter_duration: Duration,
+    try_count: u32,
+) -> Duration {
     // exponential backoff
     // 0の時1回、1の時2回、2の時4回、3の時8回
     let retry_count = 2u64.pow(try_count) as u32;
@@ -110,26 +115,35 @@ mod tests {
     #[tokio::test]
     async fn test_stop() {
         let client = Client::new();
-        let make_builder = |i: u8| client.get("https://httpbin.org/get").header("Try-Count", i.to_string());
+        let make_builder = |i: u8| {
+            client
+                .get("https://httpbin.org/get")
+                .header("Try-Count", i.to_string())
+        };
         let check_done = |response: Response| async move {
             if response.status().is_success() {
-                let json  = match response.json::<serde_json::Value>().await {
+                let json = match response.json::<serde_json::Value>().await {
                     Ok(json) => json,
                     Err(_) => return Err(false),
                 };
                 let try_count = get_try_count(&json);
-                if try_count == 0 {
-                    Err(true)
-                } else {
-                    Ok(json)
-                }
+                if try_count == 0 { Err(true) } else { Ok(json) }
             } else {
                 Err(false)
             }
         };
 
-        match execute_raw(make_builder, check_done, 3, Duration::from_secs(1), get_jitter, sleeper).await {
-            Err(Error::Stop) => {},
+        match execute_raw(
+            make_builder,
+            check_done,
+            3,
+            Duration::from_secs(1),
+            get_jitter,
+            sleeper,
+        )
+        .await
+        {
+            Err(Error::Stop) => {}
             _ => {
                 panic!("Test failed: Expected TryOver error.");
             }
@@ -139,10 +153,14 @@ mod tests {
     #[tokio::test]
     async fn test_over_try() {
         let client = Client::new();
-        let make_builder = |i: u8| client.get("https://httpbin.org/get").header("Try-Count", i.to_string());
+        let make_builder = |i: u8| {
+            client
+                .get("https://httpbin.org/get")
+                .header("Try-Count", i.to_string())
+        };
         let check_done = |response: Response| async move {
             if response.status().is_success() {
-                let json  = match response.json::<serde_json::Value>().await {
+                let json = match response.json::<serde_json::Value>().await {
                     Ok(json) => json,
                     Err(_) => return Err(false),
                 };
@@ -157,8 +175,17 @@ mod tests {
             }
         };
 
-        match execute_raw(make_builder, check_done, 3, Duration::from_secs(1), get_jitter, sleeper).await {
-            Err(Error::TryOver) => {},
+        match execute_raw(
+            make_builder,
+            check_done,
+            3,
+            Duration::from_secs(1),
+            get_jitter,
+            sleeper,
+        )
+        .await
+        {
+            Err(Error::TryOver) => {}
             _ => {
                 panic!("Test failed: Expected TryOver error.");
             }
@@ -168,7 +195,11 @@ mod tests {
     #[tokio::test]
     async fn test_success() {
         let client = Client::new();
-        let make_builder = |i: u8| client.get("https://httpbin.org/get").header("Try-Count", i.to_string());
+        let make_builder = |i: u8| {
+            client
+                .get("https://httpbin.org/get")
+                .header("Try-Count", i.to_string())
+        };
         let check_done = |response: Response| async move {
             if response.status().is_success() {
                 match response.json::<serde_json::Value>().await {
@@ -180,10 +211,19 @@ mod tests {
             }
         };
 
-        match execute_raw(make_builder, check_done, 3, Duration::from_secs(1), get_jitter, sleeper).await {
+        match execute_raw(
+            make_builder,
+            check_done,
+            3,
+            Duration::from_secs(1),
+            get_jitter,
+            sleeper,
+        )
+        .await
+        {
             Ok(result) => {
                 assert!(result.is_object()); // 簡単なチェック
-            },
+            }
             Err(e) => {
                 panic!("Test failed: {:?}", e);
             }
