@@ -7,7 +7,4 @@ pub enum Error {
 
     #[error("Stop")]
     Stop,
-
-    #[error("reqwest {0}")]
-    Reqwest(#[from] reqwest::Error),
 }

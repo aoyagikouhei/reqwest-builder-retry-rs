@@ -24,7 +24,7 @@ pub async fn execute<T, F, G, Fut>(
 ) -> Result<T, Error>
 where
     F: Fn(u8) -> RequestBuilder,
-    G: Fn(Response) -> Fut,
+    G: Fn(Result<Response, reqwest::Error>) -> Fut,
     Fut: Future<Output = Result<T, bool>> + Send + 'static,
 {
     execute_raw(
@@ -48,7 +48,7 @@ pub async fn execute_raw<T, F, G, H, I, FutG, FutI>(
 ) -> Result<T, Error>
 where
     F: Fn(u8) -> RequestBuilder,
-    G: Fn(Response) -> FutG,
+    G: Fn(Result<Response, reqwest::Error>) -> FutG,
     H: Fn() -> Duration,
     I: Fn(Duration) -> FutI,
     FutG: Future<Output = Result<T, bool>> + Send + 'static,
@@ -57,7 +57,7 @@ where
     // 指定回数実行する
     for i in 0..try_count {
         let builder = make_builder(i);
-        let response = builder.send().await?;
+        let response = builder.send().await;
         let retry_duration = if i == try_count - 1 {
             calc_retry_duration(retry_duration, get_jitter(), i as u32)
         } else {
@@ -120,17 +120,19 @@ mod tests {
                 .get("https://httpbin.org/get")
                 .header("Try-Count", i.to_string())
         };
-        let check_done = |response: Response| async move {
-            if response.status().is_success() {
-                let json = match response.json::<serde_json::Value>().await {
-                    Ok(json) => json,
-                    Err(_) => return Err(false),
-                };
-                let try_count = get_try_count(&json);
-                if try_count == 0 { Err(true) } else { Ok(json) }
-            } else {
-                Err(false)
+        let check_done = |response: Result<Response, _>| async move {
+            let Ok(response) = response else {
+                return Err(false); // Retry on failure
+            };
+            if !response.status().is_success() {
+                return Err(false); // Retry on failure
             }
+
+            let Ok(json) = response.json::<serde_json::Value>().await else {
+                return Err(false);
+            };
+            let try_count = get_try_count(&json);
+            if try_count == 0 { Err(true) } else { Ok(json) }
         };
 
         match execute_raw(
@@ -158,20 +160,21 @@ mod tests {
                 .get("https://httpbin.org/get")
                 .header("Try-Count", i.to_string())
         };
-        let check_done = |response: Response| async move {
-            if response.status().is_success() {
-                let json = match response.json::<serde_json::Value>().await {
-                    Ok(json) => json,
-                    Err(_) => return Err(false),
-                };
-                let try_count = get_try_count(&json);
-                if try_count < 4 {
-                    Err(false) // continue retrying
-                } else {
-                    Ok(json)
-                }
+        let check_done = |response: Result<Response, _>| async move {
+            let Ok(response) = response else {
+                return Err(false); // Retry on failure
+            };
+            if !response.status().is_success() {
+                return Err(false); // Retry on failure
+            }
+            let Ok(json) = response.json::<serde_json::Value>().await else {
+                return Err(false);
+            };
+            let try_count = get_try_count(&json);
+            if try_count < 4 {
+                Err(false) // continue retrying
             } else {
-                Err(false)
+                Ok(json)
             }
         };
 
@@ -200,15 +203,17 @@ mod tests {
                 .get("https://httpbin.org/get")
                 .header("Try-Count", i.to_string())
         };
-        let check_done = |response: Response| async move {
-            if response.status().is_success() {
-                match response.json::<serde_json::Value>().await {
-                    Ok(json) => Ok(json),
-                    Err(_) => return Err(false),
-                }
-            } else {
-                Err(false)
+        let check_done = |response: Result<Response, _>| async move {
+            let Ok(response) = response else {
+                return Err(false); // Retry on failure
+            };
+            if !response.status().is_success() {
+                return Err(false); // Retry on failure
             }
+            let Ok(json) = response.json::<serde_json::Value>().await else {
+                return Err(false);
+            };
+            Ok(json)
         };
 
         match execute_raw(
