@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use reqwest_retry::RetryType;
 use twapi_v2::{api::get_2_users_me, oauth10a::OAuthAuthentication};
 
 #[tokio::main]
@@ -17,21 +18,21 @@ async fn main() -> anyhow::Result<()> {
         },
         |response| async move {
             let Ok(response) = response else {
-                return Err(false); // Retry on failure
+                return Err(RetryType::Retry);
             };
             if response.status().is_success() {
                 match response.json::<get_2_users_me::Response>().await {
                     Ok(user) => Ok(user),
-                    Err(_) => Err(false), // Retry on failure
+                    Err(_) => Err(RetryType::Retry),
                 }
             } else if response.status().is_client_error() {
-                Err(true)
+                Err(RetryType::Stop)
             } else {
-                Err(false) // Retry on failure
+                Err(RetryType::Retry)
             }
         },
         3,
-        Duration::from_secs(2), // Retry duration
+        Duration::from_secs(2), 
     )
     .await?;
     println!("Result: {:?}", result);

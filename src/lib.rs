@@ -16,6 +16,11 @@ fn default_jitter() -> Duration {
     Duration::from_millis(rng.random_range(0..100))
 }
 
+pub enum RetryType {
+    Stop,
+    Retry,
+}
+
 pub async fn execute<T, F, G, Fut>(
     make_builder: F,
     check_done: G,
@@ -25,7 +30,7 @@ pub async fn execute<T, F, G, Fut>(
 where
     F: Fn(u8) -> RequestBuilder,
     G: Fn(Result<Response, reqwest::Error>) -> Fut,
-    Fut: Future<Output = Result<T, bool>> + Send + 'static,
+    Fut: Future<Output = Result<T, RetryType>> + Send + 'static,
 {
     execute_raw(
         make_builder,
@@ -51,7 +56,7 @@ where
     G: Fn(Result<Response, reqwest::Error>) -> FutG,
     H: Fn() -> Duration,
     I: Fn(Duration) -> FutI,
-    FutG: Future<Output = Result<T, bool>> + Send + 'static,
+    FutG: Future<Output = Result<T, RetryType>> + Send + 'static,
     FutI: Future<Output = ()> + Send + 'static,
 {
     // 指定回数実行する
@@ -66,9 +71,14 @@ where
         };
         match check_done(response).await {
             Ok(result) => return Ok(result),
-            Err(stop_flag) => {
-                if stop_flag {
-                    return Err(Error::Stop);
+            Err(retry_type) => {
+                match retry_type {
+                    RetryType::Retry => {
+                        // continue retrying
+                    }
+                    RetryType::Stop => {
+                        return Err(Error::Stop);
+                    }
                 }
             }
         }
@@ -122,17 +132,21 @@ mod tests {
         };
         let check_done = |response: Result<Response, _>| async move {
             let Ok(response) = response else {
-                return Err(false); // Retry on failure
+                return Err(RetryType::Retry); // Retry on failure
             };
             if !response.status().is_success() {
-                return Err(false); // Retry on failure
+                return Err(RetryType::Retry); // Retry on failure
             }
 
             let Ok(json) = response.json::<serde_json::Value>().await else {
-                return Err(false);
+                return Err(RetryType::Retry);
             };
             let try_count = get_try_count(&json);
-            if try_count == 0 { Err(true) } else { Ok(json) }
+            if try_count == 0 {
+                Err(RetryType::Stop)
+            } else {
+                Ok(json)
+            }
         };
 
         match execute_raw(
@@ -162,17 +176,17 @@ mod tests {
         };
         let check_done = |response: Result<Response, _>| async move {
             let Ok(response) = response else {
-                return Err(false); // Retry on failure
+                return Err(RetryType::Retry); // Retry on failure
             };
             if !response.status().is_success() {
-                return Err(false); // Retry on failure
+                return Err(RetryType::Retry); // Retry on failure
             }
             let Ok(json) = response.json::<serde_json::Value>().await else {
-                return Err(false);
+                return Err(RetryType::Retry);
             };
             let try_count = get_try_count(&json);
             if try_count < 4 {
-                Err(false) // continue retrying
+                Err(RetryType::Retry) // continue retrying
             } else {
                 Ok(json)
             }
@@ -205,13 +219,13 @@ mod tests {
         };
         let check_done = |response: Result<Response, _>| async move {
             let Ok(response) = response else {
-                return Err(false); // Retry on failure
+                return Err(RetryType::Retry); // Retry on failure
             };
             if !response.status().is_success() {
-                return Err(false); // Retry on failure
+                return Err(RetryType::Retry); // Retry on failure
             }
             let Ok(json) = response.json::<serde_json::Value>().await else {
-                return Err(false);
+                return Err(RetryType::Retry);
             };
             Ok(json)
         };
