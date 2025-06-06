@@ -2,11 +2,20 @@
 name = "reqwest-retry"
 version = "0.1.0"
 edition = "2024"
+authors = ["aoyagikouhei <aoyagi.kouhei@gmail.com>"]
+license = "MIT"
+description = "LINE API library."
+repository = "https://github.com/aoyagikouhei/reqwest-retry-rs"
+keywords = ["reqwest", "retry"]
+categories = ["helper"]
+readme = "README.md"
+documentation = "https://docs.rs/reqwest-retry"
 
 [dependencies]
 rand = "0.9"
 reqwest = { version = "0.12", features = ["json", "multipart"], default-features = false, optional = true }
 thiserror = "2"
+tokio = { version = "1", features = ["time"] }
 
 [features]
 default = ["reqwest/default-tls"]
@@ -15,3 +24,4 @@ rustls-tls = ["reqwest/rustls-tls"]
 [dev-dependencies]
 anyhow = "1"
 tokio = { version = "1", features = ["macros", "rt"] }
+serde_json = "1"
