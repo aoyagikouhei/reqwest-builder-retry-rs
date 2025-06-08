@@ -11,7 +11,7 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("ACCESS_KEY").unwrap_or_default(),
         std::env::var("ACCESS_SECRET").unwrap_or_default(),
     );
-    let result = reqwest_retry::execute(
+    let result = reqwest_retry::convenience::execute(
         |_| {
             let api = get_2_users_me::Api::all();
             api.build(&auth)
@@ -26,13 +26,18 @@ async fn main() -> anyhow::Result<()> {
                     Err(_) => Err(RetryType::Retry),
                 }
             } else if response.status().is_client_error() {
-                Err(RetryType::Stop)
+                // Xは403の時はリトライで回復することがある
+                if response.status().as_u16() == 403 {
+                    Err(RetryType::Retry)
+                } else {
+                    Err(RetryType::Stop)
+                }
             } else {
                 Err(RetryType::Retry)
             }
         },
         3,
-        Duration::from_secs(2), 
+        Duration::from_secs(2),
     )
     .await?;
     println!("Result: {:?}", result);

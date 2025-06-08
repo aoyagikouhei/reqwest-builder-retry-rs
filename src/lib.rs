@@ -1,5 +1,4 @@
 use crate::error::Error;
-use rand::{Rng, SeedableRng, rngs::StdRng};
 use reqwest::{RequestBuilder, Response};
 use std::future::Future;
 use std::time::Duration;
@@ -7,43 +6,15 @@ use std::time::Duration;
 pub mod error;
 pub use reqwest;
 
-async fn default_sleeper(duration: Duration) {
-    tokio::time::sleep(duration).await;
-}
-
-fn default_jitter() -> Duration {
-    let mut rng = StdRng::from_os_rng();
-    Duration::from_millis(rng.random_range(0..100))
-}
+#[cfg(feature = "convenience")]
+pub mod convenience;
 
 pub enum RetryType {
     Stop,
     Retry,
 }
 
-pub async fn execute<T, F, G, Fut>(
-    make_builder: F,
-    check_done: G,
-    try_count: u8,
-    retry_duration: Duration,
-) -> Result<T, Error>
-where
-    F: Fn(u8) -> RequestBuilder,
-    G: Fn(Result<Response, reqwest::Error>) -> Fut,
-    Fut: Future<Output = Result<T, RetryType>> + Send + 'static,
-{
-    execute_raw(
-        make_builder,
-        check_done,
-        try_count,
-        retry_duration,
-        default_jitter,
-        default_sleeper,
-    )
-    .await
-}
-
-pub async fn execute_raw<T, F, G, H, I, FutG, FutI>(
+pub async fn execute<T, F, G, H, I, FutG, FutI>(
     make_builder: F,
     check_done: G,
     try_count: u8,
@@ -149,7 +120,7 @@ mod tests {
             }
         };
 
-        match execute_raw(
+        match execute(
             make_builder,
             check_done,
             3,
@@ -192,7 +163,7 @@ mod tests {
             }
         };
 
-        match execute_raw(
+        match execute(
             make_builder,
             check_done,
             3,
@@ -230,7 +201,7 @@ mod tests {
             Ok(json)
         };
 
-        match execute_raw(
+        match execute(
             make_builder,
             check_done,
             3,

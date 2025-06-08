@@ -7,5 +7,14 @@
 			"path": "examples/x-sample"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"rust-analyzer.cargo.features": [
+			"convenience"
+		],
+		"rust-analyzer.linkedProjects": [
+			"./Cargo.toml",
+			"examples/x-sample/Cargo.toml",
+		],
+		"rust-analyzer.showUnlinkedFileNotification": false
+	}
 }
