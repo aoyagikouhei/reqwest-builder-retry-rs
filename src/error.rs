@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("TryOver")]
@@ -8,7 +7,4 @@ pub enum Error {
 
     #[error("Stop")]
     Stop,
-
-    #[error("reqwest {0}")]
-    Reqwest(#[from] reqwest::Error),
 }

@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "examples/x-sample"
+		}
+	],
+	"settings": {
+		"rust-analyzer.cargo.features": [
+			"convenience"
+		],
+		"rust-analyzer.linkedProjects": [
+			"./Cargo.toml",
+			"examples/x-sample/Cargo.toml",
+		],
+		"rust-analyzer.showUnlinkedFileNotification": false
+	}
+}

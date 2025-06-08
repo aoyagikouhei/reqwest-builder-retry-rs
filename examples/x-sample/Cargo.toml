@@ -1,0 +1,13 @@
+[package]
+name = "x-sample"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+twapi-v2 = { version = "0.20.0", features = ["oauth10a"] }
+reqwest-retry = { path = "../..", features = ["rustls-tls", "convenience"], default-features = false }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[features]
+convenience = []
