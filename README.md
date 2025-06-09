@@ -1,6 +1,6 @@
-# reqwest-retry-rs
+# reqwest-builder-retry-rs
 
-This is reqwest retry library.
+This is reqwest builder retry library.
 
 ## Features
 ### default

@@ -74,59 +74,22 @@ fn calc_retry_duration(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use reqwest::Client;
 
-    fn get_try_count(json: &serde_json::Value) -> u8 {
-        json["headers"]["Try-Count"]
-            .as_str()
-            .and_then(|s| s.parse::<u8>().ok())
-            .unwrap_or(0)
-    }
-
-    fn get_jitter() -> Duration {
-        // Jitter duration can be a fixed value or a random value.
-        // Here we use a fixed value for simplicity.
-        Duration::from_millis(100)
-    }
-
-    async fn sleeper(_duration: Duration) {
-        //tokio::time::sleep(duration).await;
+    fn make_builder_for_test(i: u8) -> RequestBuilder {
+        reqwest::Client::new()
+            .get("https://httpbin.org/get")
+            .header("Try-Count", i.to_string())
     }
 
     #[tokio::test]
     async fn test_stop() {
-        let client = Client::new();
-        let make_builder = |i: u8| {
-            client
-                .get("https://httpbin.org/get")
-                .header("Try-Count", i.to_string())
-        };
-        let check_done = |response: Result<Response, _>| async move {
-            let Ok(response) = response else {
-                return Err(RetryType::Retry); // Retry on failure
-            };
-            if !response.status().is_success() {
-                return Err(RetryType::Retry); // Retry on failure
-            }
-
-            let Ok(json) = response.json::<serde_json::Value>().await else {
-                return Err(RetryType::Retry);
-            };
-            let try_count = get_try_count(&json);
-            if try_count == 0 {
-                Err(RetryType::Stop)
-            } else {
-                Ok(json)
-            }
-        };
-
         match execute(
-            make_builder,
-            check_done,
+            make_builder_for_test,
+            |_| async move { Err::<serde_json::Value, RetryType>(RetryType::Stop) },
             3,
             Duration::from_secs(1),
-            get_jitter,
-            sleeper,
+            || Duration::from_millis(100),
+            |_| async move {},
         )
         .await
         {
@@ -139,37 +102,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_over_try() {
-        let client = Client::new();
-        let make_builder = |i: u8| {
-            client
-                .get("https://httpbin.org/get")
-                .header("Try-Count", i.to_string())
-        };
-        let check_done = |response: Result<Response, _>| async move {
-            let Ok(response) = response else {
-                return Err(RetryType::Retry); // Retry on failure
-            };
-            if !response.status().is_success() {
-                return Err(RetryType::Retry); // Retry on failure
-            }
-            let Ok(json) = response.json::<serde_json::Value>().await else {
-                return Err(RetryType::Retry);
-            };
-            let try_count = get_try_count(&json);
-            if try_count < 4 {
-                Err(RetryType::Retry) // continue retrying
-            } else {
-                Ok(json)
-            }
-        };
-
         match execute(
-            make_builder,
-            check_done,
-            3,
+            make_builder_for_test,
+            |_| async move { Err::<serde_json::Value, RetryType>(RetryType::Retry) },
+            1,
             Duration::from_secs(1),
-            get_jitter,
-            sleeper,
+            || Duration::from_millis(100),
+            |_| async move {},
         )
         .await
         {
@@ -182,12 +121,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_success() {
-        let client = Client::new();
-        let make_builder = |i: u8| {
-            client
-                .get("https://httpbin.org/get")
-                .header("Try-Count", i.to_string())
-        };
         let check_done = |response: Result<Response, _>| async move {
             let Ok(response) = response else {
                 return Err(RetryType::Retry); // Retry on failure
@@ -202,17 +135,17 @@ mod tests {
         };
 
         match execute(
-            make_builder,
+            make_builder_for_test,
             check_done,
             3,
             Duration::from_secs(1),
-            get_jitter,
-            sleeper,
+            || Duration::from_millis(100),
+            |_| async move {},
         )
         .await
         {
             Ok(result) => {
-                assert!(result.is_object()); // 簡単なチェック
+                assert!(result.is_object());
             }
             Err(e) => {
                 panic!("Test failed: {:?}", e);

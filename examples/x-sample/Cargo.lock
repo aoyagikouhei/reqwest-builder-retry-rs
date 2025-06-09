@@ -964,7 +964,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "reqwest-retry"
+name = "reqwest-builder-retry"
 version = "0.1.0"
 dependencies = [
  "rand",
@@ -1766,7 +1766,7 @@ name = "x-sample"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "reqwest-retry",
+ "reqwest-builder-retry",
  "tokio",
  "twapi-v2",
 ]

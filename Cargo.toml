@@ -1,15 +1,15 @@
 [package]
-name = "reqwest-retry"
+name = "reqwest-builder-retry"
 version = "0.1.0"
 edition = "2024"
 authors = ["aoyagikouhei <aoyagi.kouhei@gmail.com>"]
 license = "MIT"
 description = "LINE API library."
-repository = "https://github.com/aoyagikouhei/reqwest-retry-rs"
+repository = "https://github.com/aoyagikouhei/reqwest-builder-retry-rs"
 keywords = ["reqwest", "retry"]
 categories = ["helper"]
 readme = "README.md"
-documentation = "https://docs.rs/reqwest-retry"
+documentation = "https://docs.rs/reqwest-builder-retry"
 
 [dependencies]
 rand = { version = "0.9", optional = true  }

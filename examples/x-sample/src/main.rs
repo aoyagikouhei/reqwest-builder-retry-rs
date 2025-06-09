@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use reqwest_retry::RetryType;
+use reqwest_builder_retry::RetryType;
 use twapi_v2::{api::get_2_users_me, oauth10a::OAuthAuthentication};
 
 #[tokio::main]
@@ -11,7 +11,7 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("ACCESS_KEY").unwrap_or_default(),
         std::env::var("ACCESS_SECRET").unwrap_or_default(),
     );
-    let result = reqwest_retry::convenience::execute(
+    let result = reqwest_builder_retry::convenience::execute(
         |_| {
             let api = get_2_users_me::Api::all();
             api.build(&auth)
