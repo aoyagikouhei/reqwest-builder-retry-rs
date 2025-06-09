@@ -14,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
     let result = reqwest_builder_retry::convenience::execute(
         |_| {
             let api = get_2_users_me::Api::all();
-            api.build(&auth)
+            api.build(&auth).timeout(Duration::from_secs(3))
         },
         |response| async move {
             let Ok(response) = response else {
