@@ -7,7 +7,6 @@ license = "MIT"
 description = "LINE API library."
 repository = "https://github.com/aoyagikouhei/reqwest-builder-retry-rs"
 keywords = ["reqwest", "retry"]
-categories = ["helper"]
 readme = "README.md"
 documentation = "https://docs.rs/reqwest-builder-retry"
 
