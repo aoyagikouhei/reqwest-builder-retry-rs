@@ -12,6 +12,7 @@ pub mod convenience;
 pub enum RetryType {
     Stop,
     Retry,
+    RetryAfter(Duration),
 }
 
 pub async fn execute<T, F, G, H, I, FutG, FutI>(
@@ -30,31 +31,38 @@ where
     FutG: Future<Output = Result<T, RetryType>> + Send + 'static,
     FutI: Future<Output = ()> + Send + 'static,
 {
+    // リトライ回数が0の時はエラーを返す
+    if try_count == 0 {
+        return Err(Error::NoTry);
+    }
+
     // 指定回数実行する
     for i in 0..try_count {
         let builder = make_builder(i);
         let response = builder.send().await;
-        let retry_duration = if i == try_count - 1 {
-            calc_retry_duration(retry_duration, get_jitter(), i as u32)
-        } else {
-            // 最後の試行では、スリープしない
-            Duration::ZERO
-        };
-        match check_done(response).await {
+        let next_retry_duration = match check_done(response).await {
             Ok(result) => return Ok(result),
             Err(retry_type) => {
                 match retry_type {
                     RetryType::Retry => {
-                        // continue retrying
+                        // リトライなので停止時間を計算する
+                        calc_retry_duration(retry_duration, get_jitter(), i as u32)
+                    }
+                    RetryType::RetryAfter(target_duration) => {
+                        // リトライ後の待機時間を指定された時間に設定する
+                        target_duration
                     }
                     RetryType::Stop => {
+                        // 停止指示が来たのでエラーを返す
                         return Err(Error::Stop);
                     }
                 }
             }
-        }
-        if retry_duration > Duration::ZERO {
-            sleeper(retry_duration).await;
+        };
+
+        // 実行回数が指定回数未満で、リトライ時間が0以上なら待機する
+        if i < try_count - 1 && next_retry_duration > Duration::ZERO {
+            sleeper(next_retry_duration).await;
         }
     }
     Err(Error::TryOver)
@@ -105,10 +113,10 @@ mod tests {
         match execute(
             make_builder_for_test,
             |_| async move { Err::<serde_json::Value, RetryType>(RetryType::Retry) },
-            1,
-            Duration::from_secs(1),
+            4,
+            Duration::from_secs(2),
             || Duration::from_millis(100),
-            |_| async move {},
+            |duration| async move { println!("Sleeping for {:?}", duration) },
         )
         .await
         {
