@@ -62,11 +62,14 @@ async fn main() -> anyhow::Result<()> {
     let result = reqwest_builder_retry::convenience::execute(
         |_| {
             let api = get_2_users_me::Api::open();
+            // APIの実行には必ずタイムアウトをつけましょう
             let builder = api.build(&auth).timeout(Duration::from_secs(3));
+            // リクエストのログ
             tracing::trace!(?builder, "api request");
             builder
         },
         |response| {
+            // レスポンスのログ
             tracing::trace!(?response, "api response");
             check_done::<get_2_users_me::Response>(response)
         },
