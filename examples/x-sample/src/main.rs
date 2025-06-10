@@ -1,27 +1,35 @@
 use std::time::Duration;
 
-use reqwest_builder_retry::RetryType;
+use reqwest_builder_retry::{
+    RetryType,
+    reqwest::{Error, Response},
+};
+use tracing::Level;
+use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
+use tracing_subscriber::{Registry, filter::Targets, layer::SubscriberExt};
 use twapi_v2::{api::get_2_users_me, oauth10a::OAuthAuthentication};
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let auth = OAuthAuthentication::new(
-        std::env::var("CONSUMER_KEY").unwrap_or_default(),
-        std::env::var("CONSUMER_SECRET").unwrap_or_default(),
-        std::env::var("ACCESS_KEY").unwrap_or_default(),
-        std::env::var("ACCESS_SECRET").unwrap_or_default(),
-    );
-    let result = reqwest_builder_retry::convenience::execute(
-        |_| {
-            let api = get_2_users_me::Api::all();
-            api.build(&auth).timeout(Duration::from_secs(3))
-        },
-        |response| async move {
-            let Ok(response) = response else {
-                return Err(RetryType::Retry);
-            };
+pub fn setup_tracing(name: &str) {
+    let formatting_layer = BunyanFormattingLayer::new(name.into(), std::io::stdout);
+    let filter = Targets::new()
+        .with_target(name, Level::TRACE)
+        .with_target("twapi_v2", Level::TRACE);
+
+    let subscriber = Registry::default()
+        .with(filter)
+        .with(JsonStorageLayer)
+        .with(formatting_layer);
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+}
+
+async fn check_done<T>(response: Result<Response, Error>) -> Result<T, RetryType>
+where
+    T: serde::de::DeserializeOwned,
+{
+    match response {
+        Ok(response) => {
             if response.status().is_success() {
-                match response.json::<get_2_users_me::Response>().await {
+                match response.json::<T>().await {
                     Ok(user) => Ok(user),
                     Err(_) => Err(RetryType::Retry),
                 }
@@ -35,6 +43,32 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 Err(RetryType::Retry)
             }
+        }
+        Err(_) => Err(RetryType::Retry),
+    }
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    setup_tracing("x_sample");
+    tracing::trace!("start");
+
+    let auth = OAuthAuthentication::new(
+        std::env::var("CONSUMER_KEY").unwrap_or_default(),
+        std::env::var("CONSUMER_SECRET").unwrap_or_default(),
+        std::env::var("ACCESS_KEY").unwrap_or_default(),
+        std::env::var("ACCESS_SECRET").unwrap_or_default(),
+    );
+    let result = reqwest_builder_retry::convenience::execute(
+        |_| {
+            let api = get_2_users_me::Api::open();
+            let builder = api.build(&auth).timeout(Duration::from_secs(3));
+            tracing::trace!(?builder, "api request");
+            builder
+        },
+        |response| {
+            tracing::trace!(?response, "api response");
+            check_done::<get_2_users_me::Response>(response)
         },
         3,
         Duration::from_secs(2),
