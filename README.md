@@ -19,6 +19,9 @@ This is reqwest builder retry library.
 X API Sample
 
 ## ChangeLogs
+### 0.3.0 (2025/06/11)
+- return status_code, headers
+
 ### 0.2.0 (2025/06/10)
 - bug fix
 - add RetryType::RetryAfter

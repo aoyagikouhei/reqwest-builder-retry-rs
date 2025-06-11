@@ -3,7 +3,7 @@ use std::time::Duration;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use reqwest::{RequestBuilder, Response};
 
-use crate::{RetryType, error::Error};
+use crate::{RetryResult, RetryType, error::Error};
 
 async fn default_sleeper(duration: Duration) {
     tokio::time::sleep(duration).await;
@@ -19,11 +19,11 @@ pub async fn execute<T, F, G, Fut>(
     check_done: G,
     try_count: u8,
     retry_duration: Duration,
-) -> Result<T, Error>
+) -> Result<RetryResult<T>, Error>
 where
     F: Fn(u8) -> RequestBuilder,
     G: Fn(Result<Response, reqwest::Error>) -> Fut,
-    Fut: Future<Output = Result<T, RetryType>> + Send + 'static,
+    Fut: Future<Output = Result<RetryResult<T>, RetryType>> + Send + 'static,
 {
     crate::execute(
         make_builder,

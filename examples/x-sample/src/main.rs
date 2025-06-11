@@ -1,8 +1,7 @@
 use std::time::Duration;
 
 use reqwest_builder_retry::{
-    RetryType,
-    reqwest::{Error, Response},
+    reqwest::{Error, Response}, RetryResult, RetryType
 };
 use tracing::Level;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
@@ -22,16 +21,19 @@ pub fn setup_tracing(name: &str) {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
-async fn check_done<T>(response: Result<Response, Error>) -> Result<T, RetryType>
+async fn check_done<T>(response: Result<Response, Error>) -> Result<RetryResult<T>, RetryType>
 where
     T: serde::de::DeserializeOwned,
 {
+    tracing::trace!(?response, "api response");
     match response {
         Ok(response) => {
             if response.status().is_success() {
+                let status_code = response.status();
+                let headers = response.headers().clone();
                 match response.json::<T>().await {
-                    Ok(user) => Ok(user),
-                    Err(_) => Err(RetryType::Retry),
+                    Ok(result) => Ok(RetryResult{result, status_code, headers}),
+                    Err(_err)  =>  Err(RetryType::Retry)
                 }
             } else if response.status().is_client_error() {
                 // Xは403の時はリトライで回復することがある
@@ -68,11 +70,7 @@ async fn main() -> anyhow::Result<()> {
             tracing::trace!(?builder, "api request");
             builder
         },
-        |response| {
-            // レスポンスのログ
-            tracing::trace!(?response, "api response");
-            check_done::<get_2_users_me::Response>(response)
-        },
+        check_done::<get_2_users_me::Response>,
         3,
         Duration::from_secs(2),
     )

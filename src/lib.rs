@@ -1,5 +1,6 @@
 use crate::error::Error;
-use reqwest::{RequestBuilder, Response};
+use reqwest::header::HeaderMap;
+use reqwest::{RequestBuilder, Response, StatusCode};
 use std::future::Future;
 use std::time::Duration;
 
@@ -8,6 +9,13 @@ pub use reqwest;
 
 #[cfg(feature = "convenience")]
 pub mod convenience;
+
+#[derive(Debug)]
+pub struct RetryResult<T> {
+    pub result: T,
+    pub status_code: StatusCode,
+    pub headers: HeaderMap,
+}
 
 pub enum RetryType {
     Stop,
@@ -22,13 +30,13 @@ pub async fn execute<T, F, G, H, I, FutG, FutI>(
     retry_duration: Duration,
     get_jitter: H,
     sleeper: I,
-) -> Result<T, Error>
+) -> Result<RetryResult<T>, Error>
 where
     F: Fn(u8) -> RequestBuilder,
     G: Fn(Result<Response, reqwest::Error>) -> FutG,
     H: Fn() -> Duration,
     I: Fn(Duration) -> FutI,
-    FutG: Future<Output = Result<T, RetryType>> + Send + 'static,
+    FutG: Future<Output = Result<RetryResult<T>, RetryType>> + Send + 'static,
     FutI: Future<Output = ()> + Send + 'static,
 {
     // リトライ回数が0の時はエラーを返す
@@ -93,7 +101,7 @@ mod tests {
     async fn test_stop() {
         match execute(
             make_builder_for_test,
-            |_| async move { Err::<serde_json::Value, RetryType>(RetryType::Stop) },
+            |_| async move { Err::<RetryResult<serde_json::Value>, RetryType>(RetryType::Stop) },
             3,
             Duration::from_secs(1),
             || Duration::from_millis(100),
@@ -112,7 +120,7 @@ mod tests {
     async fn test_over_try() {
         match execute(
             make_builder_for_test,
-            |_| async move { Err::<serde_json::Value, RetryType>(RetryType::Retry) },
+            |_| async move { Err::<RetryResult<serde_json::Value>, RetryType>(RetryType::Retry) },
             4,
             Duration::from_secs(2),
             || Duration::from_millis(100),
@@ -136,10 +144,16 @@ mod tests {
             if !response.status().is_success() {
                 return Err(RetryType::Retry); // Retry on failure
             }
+            let status = response.status();
+            let headers = response.headers().clone();
             let Ok(json) = response.json::<serde_json::Value>().await else {
                 return Err(RetryType::Retry);
             };
-            Ok(json)
+            Ok(RetryResult {
+                result: json,
+                status_code: status,
+                headers,
+            })
         };
 
         match execute(
@@ -152,8 +166,8 @@ mod tests {
         )
         .await
         {
-            Ok(result) => {
-                assert!(result.is_object());
+            Ok(res) => {
+                assert_eq!(res.status_code, StatusCode::OK);
             }
             Err(e) => {
                 panic!("Test failed: {:?}", e);
