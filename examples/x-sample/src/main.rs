@@ -21,7 +21,7 @@ pub fn setup_tracing(name: &str) {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
-async fn check_done<T>(response: Result<Response, Error>) -> Result<T, RetryType>
+async fn check_done<T>(response: Result<Response, Error>) -> Result<T, (RetryType, ())>
 where
     T: serde::de::DeserializeOwned,
 {
@@ -31,20 +31,20 @@ where
             if response.status().is_success() {
                 match response.json::<T>().await {
                     Ok(result) => Ok(result),
-                    Err(_err)  =>  Err(RetryType::Retry)
+                    Err(_err)  =>  Err((RetryType::Retry, ())),
                 }
             } else if response.status().is_client_error() {
                 // Xは403の時はリトライで回復することがある
                 if response.status().as_u16() == 403 {
-                    Err(RetryType::Retry)
+                    Err((RetryType::Retry, ()))
                 } else {
-                    Err(RetryType::Stop)
+                    Err((RetryType::Stop, ()))
                 }
             } else {
-                Err(RetryType::Retry)
+                Err((RetryType::Retry, ()))
             }
         }
-        Err(_) => Err(RetryType::Retry),
+        Err(_) => Err((RetryType::Retry, ())),
     }
 }
 

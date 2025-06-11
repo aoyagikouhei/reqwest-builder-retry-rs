@@ -14,16 +14,17 @@ fn default_jitter() -> Duration {
     Duration::from_millis(rng.random_range(0..100))
 }
 
-pub async fn execute<T, F, G, Fut>(
-    make_builder: F,
-    check_done: G,
+pub async fn execute<SuccessResponse, ErrorResponse, MakerBuilder, CheckDone, FutCheckDone>(
+    make_builder: MakerBuilder,
+    check_done: CheckDone,
     try_count: u8,
     retry_duration: Duration,
-) -> Result<T, Error>
+) -> Result<SuccessResponse, Error<ErrorResponse>>
 where
-    F: Fn(u8) -> RequestBuilder,
-    G: Fn(Result<Response, reqwest::Error>) -> Fut,
-    Fut: Future<Output = Result<T, RetryType>> + Send + 'static,
+    MakerBuilder: Fn(u8) -> RequestBuilder,
+    CheckDone: Fn(Result<Response, reqwest::Error>) -> FutCheckDone,
+    FutCheckDone:
+        Future<Output = Result<SuccessResponse, (RetryType, ErrorResponse)>> + Send + 'static,
 {
     crate::execute(
         make_builder,

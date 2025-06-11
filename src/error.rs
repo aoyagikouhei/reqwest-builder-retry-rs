@@ -1,13 +1,13 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum Error<ErrorResponse> {
     #[error("NoTry")]
     NoTry,
 
     #[error("TryOver")]
-    TryOver,
+    TryOver(ErrorResponse),
 
     #[error("Stop")]
-    Stop,
+    Stop(ErrorResponse),
 }
