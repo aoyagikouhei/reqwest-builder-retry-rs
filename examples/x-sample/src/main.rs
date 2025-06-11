@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use reqwest_builder_retry::{
-    reqwest::{Error, Response}, RetryResult, RetryType
+    reqwest::{Error, Response}, RetryType
 };
 use tracing::Level;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
@@ -21,7 +21,7 @@ pub fn setup_tracing(name: &str) {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
-async fn check_done<T>(response: Result<Response, Error>) -> Result<RetryResult<T>, RetryType>
+async fn check_done<T>(response: Result<Response, Error>) -> Result<T, RetryType>
 where
     T: serde::de::DeserializeOwned,
 {
@@ -29,10 +29,8 @@ where
     match response {
         Ok(response) => {
             if response.status().is_success() {
-                let status_code = response.status();
-                let headers = response.headers().clone();
                 match response.json::<T>().await {
-                    Ok(result) => Ok(RetryResult{result, status_code, headers}),
+                    Ok(result) => Ok(result),
                     Err(_err)  =>  Err(RetryType::Retry)
                 }
             } else if response.status().is_client_error() {
