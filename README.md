@@ -19,6 +19,9 @@ This is reqwest builder retry library.
 X API Sample
 
 ## ChangeLogs
+### 0.5.0 (2025/06/12)
+- add ErrorResponse
+
 ### 0.4.0 (2025/06/12)
 - remove RetryResult
 

@@ -37,9 +37,11 @@ where
     CheckDone: Fn(Result<Response, reqwest::Error>) -> FutCheckDone,
     JITTER: Fn() -> Duration,
     SLEEPER: Fn(Duration) -> FutSLEEPER,
-    FutCheckDone:
-        Future<Output = Result<SuccessResponse, (RetryType, ErrorResponse)>> + Send + 'static,
-    FutSLEEPER: Future<Output = ()> + Send + 'static,
+    FutCheckDone: Future<Output = Result<SuccessResponse, (RetryType, ErrorResponse)>>
+        + Send
+        + Sync
+        + 'static,
+    FutSLEEPER: Future<Output = ()> + Send + Sync + 'static,
 {
     // リトライ回数が0の時はエラーを返す
     if try_count == 0 {
