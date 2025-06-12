@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use reqwest_builder_retry::{
-    reqwest::{Error, Response}, RetryType
+    RetryType,
+    reqwest::{Error, Response},
 };
 use tracing::Level;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
@@ -31,7 +32,7 @@ where
             if response.status().is_success() {
                 match response.json::<T>().await {
                     Ok(result) => Ok(result),
-                    Err(_err)  =>  Err((RetryType::Retry, ())),
+                    Err(_err) => Err((RetryType::Retry, ())),
                 }
             } else if response.status().is_client_error() {
                 // Xは403の時はリトライで回復することがある
@@ -59,20 +60,28 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("ACCESS_KEY").unwrap_or_default(),
         std::env::var("ACCESS_SECRET").unwrap_or_default(),
     );
-    let result = reqwest_builder_retry::convenience::execute(
-        |_| {
-            let api = get_2_users_me::Api::open();
-            // APIの実行には必ずタイムアウトをつけましょう
-            let builder = api.build(&auth).timeout(Duration::from_secs(3));
-            // リクエストのログ
-            tracing::trace!(?builder, "api request");
-            builder
-        },
-        check_done::<get_2_users_me::Response>,
-        3,
-        Duration::from_secs(2),
-    )
-    .await?;
-    println!("Result: {:?}", result);
+
+    let handle = tokio::spawn({
+        async move {
+            let result = reqwest_builder_retry::convenience::execute(
+                |_| {
+                    let api = get_2_users_me::Api::open();
+                    // APIの実行には必ずタイムアウトをつけましょう
+                    let builder = api.build(&auth).timeout(Duration::from_secs(3));
+                    // リクエストのログ
+                    tracing::trace!(?builder, "api request");
+                    builder
+                },
+                check_done::<get_2_users_me::Response>,
+                3,
+                Duration::from_secs(2),
+            )
+            .await;
+            println!("Result: {:?}", result);
+        }
+    });
+
+    handle.await?;
+
     Ok(())
 }
