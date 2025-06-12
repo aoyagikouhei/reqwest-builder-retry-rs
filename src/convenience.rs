@@ -23,10 +23,7 @@ pub async fn execute<SuccessResponse, ErrorResponse, MakerBuilder, CheckDone, Fu
 where
     MakerBuilder: Fn(u8) -> RequestBuilder,
     CheckDone: Fn(Result<Response, reqwest::Error>) -> FutCheckDone,
-    FutCheckDone: Future<Output = Result<SuccessResponse, (RetryType, ErrorResponse)>>
-        + Send
-        + Sync
-        + 'static,
+    FutCheckDone: Future<Output = Result<SuccessResponse, (RetryType, ErrorResponse)>>,
 {
     crate::execute(
         make_builder,
