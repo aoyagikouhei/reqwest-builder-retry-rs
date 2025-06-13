@@ -1968,6 +1968,7 @@ dependencies = [
  "anyhow",
  "reqwest-builder-retry",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-bunyan-formatter",

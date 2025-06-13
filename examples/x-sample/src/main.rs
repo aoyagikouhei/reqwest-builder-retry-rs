@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use reqwest_builder_retry::{
     RetryType,
-    reqwest::{Error, Response},
+    reqwest::{Error, Response, StatusCode},
 };
 use tracing::Level;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
@@ -21,31 +21,57 @@ pub fn setup_tracing(name: &str) {
         .with(formatting_layer);
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
+#[derive(Debug)]
+pub struct ResponseError {
+    pub status: StatusCode,
+    pub message: String,
+}
 
-async fn check_done<T>(response: Result<Response, Error>) -> Result<T, (RetryType, ())>
+async fn check_done<T>(
+    response: Result<Response, Error>,
+    retryable_status_codes: &[StatusCode],
+) -> Result<T, (RetryType, ResponseError)>
 where
     T: serde::de::DeserializeOwned,
 {
     tracing::trace!(?response, "api response");
     match response {
         Ok(response) => {
-            if response.status().is_success() {
-                match response.json::<T>().await {
+            let status_code = response.status();
+            let text = response.text().await.unwrap_or_else(|_| "".to_string());
+            let common_error = ResponseError {
+                status: status_code,
+                message: text.clone(),
+            };
+
+            if status_code.is_success() {
+                match serde_json::from_str::<T>(&text) {
                     Ok(result) => Ok(result),
-                    Err(_err) => Err((RetryType::Retry, ())),
+                    Err(err) => Err((
+                        RetryType::Retry,
+                        ResponseError {
+                            status: status_code,
+                            message: err.to_string(),
+                        },
+                    )),
                 }
-            } else if response.status().is_client_error() {
-                // Xは403の時はリトライで回復することがある
-                if response.status().as_u16() == 403 {
-                    Err((RetryType::Retry, ()))
+            } else if status_code.is_client_error() {
+                if retryable_status_codes.contains(&status_code) {
+                    Err((RetryType::Retry, common_error))
                 } else {
-                    Err((RetryType::Stop, ()))
+                    Err((RetryType::Stop, common_error))
                 }
             } else {
-                Err((RetryType::Retry, ()))
+                Err((RetryType::Retry, common_error))
             }
         }
-        Err(_) => Err((RetryType::Retry, ())),
+        Err(err) => Err((
+            RetryType::Retry,
+            ResponseError {
+                status: StatusCode::IM_A_TEAPOT,
+                message: err.to_string(),
+            },
+        )),
     }
 }
 
@@ -72,7 +98,12 @@ async fn main() -> anyhow::Result<()> {
                     tracing::trace!(?builder, "api request");
                     builder
                 },
-                check_done::<get_2_users_me::Response>,
+                |response| {
+                    check_done::<get_2_users_me::Response>(
+                        response,
+                        &[StatusCode::TOO_MANY_REQUESTS, StatusCode::FORBIDDEN],
+                    )
+                },
                 3,
                 Duration::from_secs(2),
             )
