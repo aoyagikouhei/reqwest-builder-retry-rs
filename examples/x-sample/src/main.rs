@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use reqwest_builder_retry::{
     RetryType,
+    convenience::check_status_code,
     reqwest::{Error, Response, StatusCode},
 };
 use tracing::Level;
@@ -34,41 +35,34 @@ async fn check_done<T>(
 where
     T: serde::de::DeserializeOwned,
 {
-    tracing::trace!(?response, "api response");
-    match response {
-        Ok(response) => {
-            let status_code = response.status();
-            let text = response.text().await.unwrap_or_else(|_| "".to_string());
-            let common_error = ResponseError {
-                status: status_code,
-                message: text.clone(),
-            };
+    let response = response.map_err(|err| {
+        (
+            RetryType::Retry,
+            ResponseError {
+                status: StatusCode::IM_A_TEAPOT, // エラーだとステータスコードが無いので適当に設定
+                message: err.to_string(),
+            },
+        )
+    })?;
 
-            if status_code.is_success() {
-                match serde_json::from_str::<T>(&text) {
-                    Ok(result) => Ok(result),
-                    Err(err) => Err((
-                        RetryType::Retry,
-                        ResponseError {
-                            status: status_code,
-                            message: err.to_string(),
-                        },
-                    )),
-                }
-            } else if status_code.is_client_error() {
-                if retryable_status_codes.contains(&status_code) {
-                    Err((RetryType::Retry, common_error))
-                } else {
-                    Err((RetryType::Stop, common_error))
-                }
-            } else {
-                Err((RetryType::Retry, common_error))
-            }
-        }
+    let status_code = response.status();
+    if let Some(retry_type) = check_status_code(status_code, retryable_status_codes).await {
+        return Err((
+            retry_type,
+            ResponseError {
+                status: status_code,
+                message: "Non-success status code".to_string(),
+            },
+        ));
+    }
+
+    let text = response.text().await.unwrap_or_else(|_| "".to_string());
+    match serde_json::from_str::<T>(&text) {
+        Ok(result) => Ok(result),
         Err(err) => Err((
             RetryType::Retry,
             ResponseError {
-                status: StatusCode::IM_A_TEAPOT,
+                status: status_code,
                 message: err.to_string(),
             },
         )),
