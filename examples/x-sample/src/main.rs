@@ -3,13 +3,14 @@ use std::time::Duration;
 use reqwest_builder_retry::{
     RetryType,
     convenience::check_status_code,
-    reqwest::{Error, Response, StatusCode},
+    reqwest::{Error, Response, StatusCode, header::HeaderMap},
 };
 use tracing::Level;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_subscriber::{Registry, filter::Targets, layer::SubscriberExt};
 use twapi_v2::{api::get_2_users_me, oauth10a::OAuthAuthentication};
 
+// Tracingの準備
 pub fn setup_tracing(name: &str) {
     let formatting_layer = BunyanFormattingLayer::new(name.into(), std::io::stdout);
     let filter = Targets::new()
@@ -22,12 +23,23 @@ pub fn setup_tracing(name: &str) {
         .with(formatting_layer);
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
+
+// エラー時のレスポンスのデータ
 #[derive(Debug)]
-pub struct ResponseError {
-    pub status: StatusCode,
-    pub message: String,
+pub struct ResponseData {
+    pub status_code: StatusCode,
+    pub body: String,
+    pub headers: HeaderMap,
 }
 
+// エラー情報、reqwestのエラーかそれ以外
+#[derive(Debug)]
+pub struct ResponseError {
+    pub error: Option<reqwest_builder_retry::reqwest::Error>,
+    pub response_data: Option<ResponseData>,
+}
+
+// レスポンスのチェック
 async fn check_done<T>(
     response: Result<Response, Error>,
     retryable_status_codes: &[StatusCode],
@@ -39,31 +51,38 @@ where
         (
             RetryType::Retry,
             ResponseError {
-                status: StatusCode::IM_A_TEAPOT, // エラーだとステータスコードが無いので適当に設定
-                message: err.to_string(),
+                error: Some(err),
+                response_data: None,
             },
         )
     })?;
 
     let status_code = response.status();
+    let headers = response.headers().clone();
+    let body = response.text().await.unwrap_or_else(|_| "".to_string());
+    let response_data = ResponseData {
+        status_code,
+        body,
+        headers,
+    };
+
     if let Some(retry_type) = check_status_code(status_code, retryable_status_codes).await {
         return Err((
             retry_type,
             ResponseError {
-                status: status_code,
-                message: "Non-success status code".to_string(),
+                error: None,
+                response_data: Some(response_data),
             },
         ));
     }
 
-    let text = response.text().await.unwrap_or_else(|_| "".to_string());
-    match serde_json::from_str::<T>(&text) {
+    match serde_json::from_str::<T>(&response_data.body) {
         Ok(result) => Ok(result),
-        Err(err) => Err((
+        Err(_) => Err((
             RetryType::Retry,
             ResponseError {
-                status: status_code,
-                message: err.to_string(),
+                error: None,
+                response_data: Some(response_data),
             },
         )),
     }
@@ -81,6 +100,7 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("ACCESS_SECRET").unwrap_or_default(),
     );
 
+    // スレッドで利用可能化チェック
     let handle = tokio::spawn({
         async move {
             let result = reqwest_builder_retry::convenience::execute(
@@ -93,13 +113,16 @@ async fn main() -> anyhow::Result<()> {
                     builder
                 },
                 |response| {
+                    // レスポンスのログ
+                    tracing::trace!(?response, "api response");
+                    // レスポンスのチェック
                     check_done::<get_2_users_me::Response>(
                         response,
                         &[StatusCode::TOO_MANY_REQUESTS, StatusCode::FORBIDDEN],
                     )
                 },
-                3,
-                Duration::from_secs(2),
+                3,                      // トライ回数
+                Duration::from_secs(2), // リトライ間隔
             )
             .await;
             println!("Result: {:?}", result);
