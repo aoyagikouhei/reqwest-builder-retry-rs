@@ -884,11 +884,12 @@ dependencies = [
 
 [[package]]
 name = "reqwest-builder-retry"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "rand",
  "reqwest",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",

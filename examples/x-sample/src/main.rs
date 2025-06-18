@@ -1,14 +1,9 @@
 use std::time::Duration;
 
-use reqwest_builder_retry::{
-    RetryType,
-    convenience::check_status_code,
-    reqwest::{Error, Response, StatusCode, header::HeaderMap},
-};
 use tracing::Level;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_subscriber::{Registry, filter::Targets, layer::SubscriberExt};
-use twapi_v2::{api::get_2_users_me, oauth10a::OAuthAuthentication};
+use twapi_v2::{api::get_2_users_me, oauth10a::OAuthAuthentication, reqwest::StatusCode};
 
 // Tracingの準備
 pub fn setup_tracing(name: &str) {
@@ -22,70 +17,6 @@ pub fn setup_tracing(name: &str) {
         .with(JsonStorageLayer)
         .with(formatting_layer);
     tracing::subscriber::set_global_default(subscriber).unwrap();
-}
-
-// エラー時のレスポンスのデータ
-#[derive(Debug)]
-pub struct ResponseData {
-    pub status_code: StatusCode,
-    pub body: String,
-    pub headers: HeaderMap,
-}
-
-// エラー情報、reqwestのエラーかそれ以外
-#[derive(Debug)]
-pub struct ResponseError {
-    pub error: Option<reqwest_builder_retry::reqwest::Error>,
-    pub response_data: Option<ResponseData>,
-}
-
-// レスポンスのチェック
-async fn check_done<T>(
-    response: Result<Response, Error>,
-    retryable_status_codes: &[StatusCode],
-) -> Result<T, (RetryType, ResponseError)>
-where
-    T: serde::de::DeserializeOwned,
-{
-    let response = response.map_err(|err| {
-        (
-            RetryType::Retry,
-            ResponseError {
-                error: Some(err),
-                response_data: None,
-            },
-        )
-    })?;
-
-    let status_code = response.status();
-    let headers = response.headers().clone();
-    let body = response.text().await.unwrap_or_else(|_| "".to_string());
-    let response_data = ResponseData {
-        status_code,
-        body,
-        headers,
-    };
-
-    if let Some(retry_type) = check_status_code(status_code, retryable_status_codes).await {
-        return Err((
-            retry_type,
-            ResponseError {
-                error: None,
-                response_data: Some(response_data),
-            },
-        ));
-    }
-
-    match serde_json::from_str::<T>(&response_data.body) {
-        Ok(result) => Ok(result),
-        Err(_) => Err((
-            RetryType::Retry,
-            ResponseError {
-                error: None,
-                response_data: Some(response_data),
-            },
-        )),
-    }
 }
 
 #[tokio::main]
@@ -116,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
                     // レスポンスのログ
                     tracing::trace!(?response, "api response");
                     // レスポンスのチェック
-                    check_done::<get_2_users_me::Response>(
+                    reqwest_builder_retry::convenience::json::check_done::<get_2_users_me::Response>(
                         response,
                         &[StatusCode::TOO_MANY_REQUESTS, StatusCode::FORBIDDEN],
                     )

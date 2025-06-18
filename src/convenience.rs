@@ -1,9 +1,9 @@
 use std::time::Duration;
-
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use reqwest::{RequestBuilder, Response, StatusCode};
-
 use crate::{RetryType, error::Error};
+
+pub mod json;
 
 async fn default_sleeper(duration: Duration) {
     tokio::time::sleep(duration).await;
