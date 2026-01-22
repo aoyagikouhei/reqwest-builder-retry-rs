@@ -3,11 +3,6 @@
 This is reqwest builder retry library.
 
 ## Features
-### default
-- reqwest/default-tls
-
-### rustls-tls
-- reqwest/rustls-tls
 
 ### convenience
 - rand
@@ -19,6 +14,10 @@ This is reqwest builder retry library.
 X API Sample
 
 ## ChangeLogs
+### 0.8.0 (2026/01/22)
+- update reqwest 0.13
+- rm feature rustls-tls
+
 ### 0.7.0 (2025/06/18)
 - add convenience json
 
